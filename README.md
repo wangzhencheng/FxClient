@@ -17,4 +17,18 @@ index.html就是自己的html页面，可以是JQuery、Vue、React等技术开�
 (相比其他web框架和服务器，极其简单粗暴、秒启动)；
 前端用html做view层；FxClient.jar为程序入口和壳子；轻松开发客户端。
 ```
+
+* ** step 1
+* 创建Java项目，并添加service-http.jar
+* 创建class，编写自己的业务逻辑方法method(Request request){}，添加注解@handler(uri,method)
+* main函数中new SocketHttpHelper().addHandlerByClass(YourHandler.class).start()
+
+* ** step 2
+* 创建index.html 随便实现点什么，可以用JQuery请求一下刚才写的method.路径: http://localhost:8081/subUri
+
+* ** step 3
+* 1中打jar包，和2中的index.html 以及FxClient.jar、 config.properties 放到同一个目录
+* 双击FxClient.jar，如果jdk环境变量正确，应该可以看到客户端了。
+
+
  起码做个小工具之类的客户端，开发足够迅速简单！
