@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.8.0.js">
+    </script>
+</head>
+<body>
+test html!!
+<script>
+
+    var rs=$.ajax({url:"http://localhost:8081",type:"post",data:{name:"网站从"},async:false}).responseText;
+    console.log(rs);
+
+</script>
+</body>
+</html>

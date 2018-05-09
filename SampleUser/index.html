@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="./static/jquery-3.1.1.min.js"></script>
+    <style type="text/css">
+        * {
+            padding: 0px;
+            margin: 0px;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        #canvas {
+            width: 1000px;
+            height: 500px;
+
+            display: block;
+            margin: auto;
+        }
+
+        button {
+            padding: 4px 20px;
+        }
+
+        .match_parent {
+            width: 100%;
+            height: 100%;
+        }
+
+        div::-webkit-scrollbar {
+            display: none;
+        }
+
+        .left_img_div {
+            cursor: pointer;
+        }
+
+        .left_img_div:hover {
+            background: #606060;
+        }
+
+        .img_selected {
+            background: #606060;
+        }
+
+    </style>
+</head>
+<body>
+
+<div style="width: 100%;height: 100%;overflow: scroll;">
+    <div id="leftPicsDiv"
+         style="height: 100%;overflow: scroll;  float: left;width: 200px; border: solid 1px #cccccc;min-height: 400px;box-sizing: border-box;padding: 10px;">
+
+    </div>
+    <div style="margin-left: 200px;">
+        <div style="background: #909090;">
+            <canvas id="canvas" width="1000" height="500"></canvas>
+        </div>
+        <div style="padding-left: 32px;">
+            <br/>
+            <div>
+                <div style="float: right;padding-right: 40px;">
+                    <span style="display:inline-block; width:150px;background: #b0b0b0;padding: 0px 4px;border: solid 1px gray;border-radius: 2px;font-size: 14px;">试用版...</span>
+
+                    <span>说明:输出目录为同目录下的out文件夹</span>
+                </div>
+                <button onclick="clipByRects()">根据坐标裁剪</button>
+                <!--<button onclick="resetCanvas()">重置</button>-->
+
+            </div>
+            <br/>
+            <input id="inputDir" type="text" placeholder="请输入有效的文件路径" style="width: 600px;height: 24px;"/>
+            <button onclick="findImgListByPath()">重载图片列表</button>
+        </div>
+    </div>
+
+
+    <div style="clear: both;"></div>
+</div>
+
+<div id="template" style="display: none;visibility: hidden">
+    <div class="left_img_div"
+         style="width: 180px;height: 180px; border: solid 1px gray;box-sizing: border-box;padding: 10px;">
+        <div class="match_parent">
+
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+
+    var baseUrl = "http://localhost:" + resolveParams("port", 8081);
+    var canvas, $canvas;
+    var context;
+    $(document).ready(function () {
+        init();
+    });
+
+
+    function init() {
+        initCavnas();
+//        drawImg("C:\\Users\\Wiseb2b\\Pictures\\Camera Roll\\cuser_photo_default_dest.jpg");
+
+    }
+
+    function LeftImgDiv() {
+        var self = this;
+        self.rootDiv = $("#template .left_img_div").clone();
+        self.bgImgDiv = self.rootDiv.find(".match_parent");
+
+        self.rootDiv.click(function () {
+            $(".left_img_div").removeClass("img_selected");
+            self.rootDiv.toggleClass("img_selected");
+            drawNextImg(self.path);
+        });
+        //C:/Users/Wiseb2b/Desktop/temp/cuser_photo_default_dest.jpg
+        self.loadImg = function (path) {
+            path = path.replace(/\\/g, "/");
+            self.path = path;
+            var bgCss = "url(http://localhost:8081/img/findImg?path=" + path + ") no-repeat center/contain";
+            self.bgImgDiv.css("background", bgCss);
+        };
+        self.appendTo = function (parent) {
+            self.rootDiv.appendTo(parent);
+        }
+    }
+
+    function findImgListByPath() {
+        var path = $("#inputDir").val();
+        if (path.length <= 0) {
+            alert("请输入有效的文件路径");
+            return;
+        }
+        path = path.trim();
+        if (path.indexOf(" ") > -1) {
+            alert("路径不能含有空格");
+            return;
+        }
+        $("#leftPicsDiv").empty();
+        $.ajax({
+            method: "get",
+            url: baseUrl + "/img/findImgListByPath",
+            data: {path: path},
+            success: function (data) {
+                if (data.code && data.code == 200) {
+                    var arr = data.data
+                    for (var i = 0; i < arr.length; i++) {
+                        var leftImgDiv = new LeftImgDiv();
+                        leftImgDiv.loadImg(arr[i]);
+                        leftImgDiv.appendTo($("#leftPicsDiv"));
+                    }
+                } else {
+                    alert(data.msg);
+                }
+            },
+            error: function (error) {
+                alert("出错了~");
+            }
+        })
+
+    }
+
+    function drawNextImg(path) {
+        resetCanvas();
+        drawImg(path);
+    }
+
+    function resetCanvas() {
+        canvas.img = null;
+        canvas.rects = [];
+        canvas.invalid();
+    }
+
+    function clipByRects() {
+        var rects = getImgRects();
+        var path = canvas.img.path;
+        if (!rects || rects.length <= 0) {
+            alert("无有效区域");
+            return;
+        }
+        if (!path) {
+            alert("无效文件");
+            return;
+        }
+        $.ajax({
+            type: "post",
+            url: baseUrl + "/img/clipByRects",
+            data: {path: path, rects: JSON.stringify(rects)},
+            success: function (rs) {
+                alert(rs.msg);
+            },
+            error: function (error) {
+                alert("出错了");
+            }
+        });
+    }
+
+    function getImgRects() {
+        if (!canvas || !canvas.img) {
+            return;
+        }
+        var img = canvas.img;
+        var imgW = img.width;
+        var imgH = img.height;
+        var w = $canvas.width();
+        var h = $canvas.height();
+        var imgRect = centerRect(w, h, imgW, imgH);
+
+        var rects = [];
+        canvas.rects.forEach(function (t) {
+            var r = {};
+            r.x = t.x - imgRect.l;
+            r.y = t.y - imgRect.t;
+
+            rects.push({
+                x: r.x * 100 / imgRect.w,
+                y: r.y * 100 / imgRect.h,
+                w: t.w * 100 / imgRect.w,
+                h: t.h * 100 / imgRect.h
+            });
+        });
+        return rects;
+    }
+
+    function initCavnas() {
+        $canvas = $("#canvas");
+        canvas = $canvas[0];
+        canvas.rects = [];
+
+        context = canvas.getContext('2d');
+        context.fillStyle = "#058";
+        context.strokeStyle = "#058";
+        context.lineWidth = 2;
+        context.font = "bold 20px Arial"
+
+
+        canvas.onmousedown = function (e) {
+            canvas.isDown = true;
+            canvas.downEvent = {
+                x: e.offsetX,
+                y: e.offsetY
+            };
+        }
+
+        canvas.onmouseout = function (e) {
+            canvas.isDown = false;
+            canvas.downEvent = null;
+            canvas.moveEvent = null;
+            canvas.invalid();
+        }
+
+        canvas.onmouseup = function (e) {
+            //如果点到了某个位置，且位置在删除上，则删除
+            if (canvas.downEvent && Math.abs(e.offsetX - canvas.downEvent.x) < 10
+                && Math.abs(e.offsetY - canvas.downEvent.y) < 10) {
+                for (var i = canvas.rects.length - 1; i >= 0; i--) {
+                    var t = canvas.rects[i];
+                    if (pointOver(e.offsetX, e.offsetY, t.tx, t.ty)) {
+                        //删除
+                        canvas.rects.splice(i, 1);
+                    }
+                }
+
+            }
+
+            canvas.isDown = false;
+            if (canvas.downEvent && Math.abs(e.offsetX - canvas.downEvent.x) > 50
+                && Math.abs(e.offsetY - canvas.downEvent.y) > 50)
+                canvas.rects.push(computeRightLT2RBRect(canvas.downEvent.x, canvas.downEvent.y, e.offsetX, e.offsetY));
+            canvas.downEvent = null;
+            canvas.moveEvent = null;
+            canvas.invalid();
+        }
+
+        canvas.onmousemove = function (e) {
+            canvas.invalid(e);
+            if (canvas.isDown) {
+                var x = e.offsetX;
+                var y = e.offsetY;
+                canvas.moveEvent = {x: x, y: y};
+//                context.fillRect(0,0, 300, 200);
+                context.strokeRect(canvas.downEvent.x, canvas.downEvent.y, x - canvas.downEvent.x, y - canvas.downEvent.y);
+            }
+        }
+
+        canvas.invalid = function (e) {
+            context.clearRect(0, 0, $canvas.width(), $canvas.height());
+            drawImg();
+            canvas.rects.forEach(function (t) {
+                context.strokeRect(t.x, t.y, t.w, t.h);
+                context.fillStyle = "#058";
+                context.fillText("删除", t.tx, t.ty);
+                if (e && pointOver(e.offsetX, e.offsetY, t.tx, t.ty)) {//e的坐标点，再
+                    context.fillStyle = "#6058";
+                    context.fillRect(t.x, t.y, t.w, t.h);
+                }
+            });
+
+        }
+    }
+
+    function computeRightLT2RBRect(x1, y1, x2, y2) {
+        var rs=null;
+        if(x1<x2&&y1<y2){//右下
+           rs={
+               x:x1,
+               y:y1,
+               w:x2-x1,
+               h:y2-y1
+           };
+        }else if (x1>x2&&y1<y2){//左下
+            rs={
+                x:x2,
+                y:y1,
+                w:x1-x2,
+                h:y2-y1
+            };
+        }else if (x1>x2&&y1>y2){//左上
+            rs={
+                x:x2,
+                y:y2,
+                w:x1-x2,
+                h:y1-y2
+            };
+        }else if (x1<x2&&y1<y2){//右上
+            rs={
+                x:x1,
+                y:y2,
+                w:x2-x1,
+                h:y1-y2
+            };
+        }
+        rs.w=Math.abs(rs.w);
+        rs.h=Math.abs(rs.h);
+        rs.tx=rs.x+rs.w;
+        rs.ty=rs.y+rs.h;
+
+        console.log(rs);
+        return rs;
+    }
+
+    function pointOver(x1, y1, x2, y2) {
+        return Math.abs(x1 - x2 - 20) < 20 &&
+            Math.abs(y1 - y2 + 10) < 20;
+    }
+
+    function drawImg(path) {
+        if (!canvas.img && path) {
+            var img = new Image();
+            img.path = path;
+            canvas.img = img;
+            img.onload = function () {
+                centerDrawImg();
+            }
+            img.src = baseUrl + "/img/findImg?path=" + path;
+        } else if (canvas.img) {
+            centerDrawImg();
+        }
+    }
+
+    function centerDrawImg() {
+        var img = canvas.img;
+        var imgW = img.width;
+        var imgH = img.height;
+        var w = $canvas.width();
+        var h = $canvas.height();
+        var rs = centerRect(w, h, imgW, imgH);
+        context.drawImage(img, rs.l, rs.t, rs.w, rs.h);
+    }
+
+    function loadImg(selector, path) {
+        $(selector).attr("src", baseUrl + "/img/findImg?path=" + path);
+    }
+
+    function centerRect(w, h, imgW, imgH) {
+        var rs = {};
+        if (imgW / imgH > w / h) {//图更矮 -上下居中
+            rs.scale = imgW / w;
+            rs.w = w;
+            rs.h = imgH / rs.scale;
+            rs.l = 0;
+            rs.t = (h - rs.h) / 2;
+        } else {
+            rs.scale = imgH / h;
+            rs.h = h;
+            rs.w = imgW / rs.scale;
+            rs.l = (w - rs.w) / 2;
+            rs.t = 0;
+        }
+        return rs;
+    }
+
+    function resolveParams(name, defaultVal) {
+        var url = window.location.href;
+        var p = {};
+        if (url.indexOf("?") > 0) {
+            url = url.substring(url.indexOf("?") + 1);
+            url.split("&").forEach(function (t) {
+                var kvs = t.split("=");
+                p[kvs[0]] = kvs[1];
+            })
+        }
+        if (p[name]) {
+            localStorage.setItem(name, p[name]);
+            return p[name];
+        }
+        var rs = localStorage.getItem(name);
+        if (rs) {
+            return rs;
+        }
+        return defaultVal;
+    }
+</script>
+</body>
+</html>
